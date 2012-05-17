@@ -44,11 +44,66 @@ public class ResampleOp extends AdvancedResizeOp
 		private final float[] arrWeight; // 2Dim: [wid or hei][contrib]
 		private final int numContributors; // the primary index length for the 2Dim arrays : arrPixel and arrWeight
 
-		private SubSamplingData(int[] arrN, int[] arrPixel, float[] arrWeight, int numContributors) {
-			this.arrN = arrN;
-			this.arrPixel = arrPixel;
-			this.arrWeight = arrWeight;
-			this.numContributors = numContributors;
+		private SubSamplingData(ResampleFilter filter, int srcSize, int dstSize) {
+			arrN = new int[dstSize];
+			
+			float scale = (float)dstSize / (float)srcSize;
+			final float filterSize= filter.getSamplingRadius();
+			float centerOffset = 0.5f/scale;
+			
+			float width;
+			float fNormFac;
+			int excessContributors;
+			if (scale < 1.0f) {
+				width= filterSize / scale;
+				fNormFac= (float)(1f / (Math.ceil(width) / filterSize));
+				excessContributors = 2; // Heinz: added 1 to be save with the ceilling
+			} else {
+				width = filterSize;
+				fNormFac = 1.0f;
+				excessContributors = 1;
+			}
+			
+			numContributors= (int)(width * 2 + excessContributors);
+			arrWeight= new float[dstSize * numContributors];
+			arrPixel= new int[dstSize * numContributors];
+			
+			for (int i= 0; i < dstSize; i++) {
+				final int subindex= i * numContributors;
+				float center= i / scale + centerOffset;
+				int left= (int)Math.floor(center - width);
+				int right= (int)Math.ceil(center + width);
+				for (int j= left; j <= right; j++) {
+					float weight= filter.apply((center - j) * fNormFac);
+					if (weight == 0.0f) {
+						continue;
+					}
+					int n;
+					if (j < 0) {
+						n= -j;
+					} else if (j >= srcSize) {
+						n= srcSize - j + srcSize - 1;
+					} else {
+						n= j;
+					}
+					int k= arrN[i];
+					arrN[i]++;
+					if (n < 0 || n >= srcSize) {
+						weight= 0.0f;// Flag that cell should not be used
+					}
+					arrPixel[subindex +k]= n;
+					arrWeight[subindex + k]= weight;
+				}
+				// normalize the filter's weight's so the sum equals to 1.0, very important for avoiding box type of artifacts
+				final int max= arrN[i];
+				float tot= 0;
+				for (int k= 0; k < max; k++)
+					tot+= arrWeight[subindex + k];
+				if (tot != 0f) {
+					for (int k= 0; k < max; k++)
+						arrWeight[subindex + k]/= tot;
+				}
+			}
 		}
 
 
@@ -202,71 +257,7 @@ public class ResampleOp extends AdvancedResizeOp
 	}
 
 	static SubSamplingData createSubSampling(ResampleFilter filter, int srcSize, int dstSize) {
-		float scale = (float)dstSize / (float)srcSize;
-		int[] arrN= new int[dstSize];
-		int numContributors;
-		float[] arrWeight;
-		int[] arrPixel;
-		
-		final float fwidth= filter.getSamplingRadius();
-		float centerOffset = 0.5f/scale;
-		
-		
-		float width;
-		float fNormFac;
-		int excessContributors;
-		if (scale < 1.0f) {
-			width= fwidth / scale;
-			fNormFac= (float)(1f / (Math.ceil(width) / fwidth));
-			excessContributors = 2; // Heinz: added 1 to be save with the ceilling
-		} else {
-			width = fwidth;
-			fNormFac = 1.0f;
-			excessContributors = 1;
-		}
-		
-		
-		numContributors= (int)(width * 2 + excessContributors);
-		arrWeight= new float[dstSize * numContributors];
-		arrPixel= new int[dstSize * numContributors];
-		for (int i= 0; i < dstSize; i++) {
-			final int subindex= i * numContributors;
-			float center= i / scale + centerOffset;
-			int left= (int)Math.floor(center - width);
-			int right= (int)Math.ceil(center + width);
-			for (int j= left; j <= right; j++) {
-				float weight= filter.apply((center - j) * fNormFac);
-				if (weight == 0.0f) {
-					continue;
-				}
-				int n;
-				if (j < 0) {
-					n= -j;
-				} else if (j >= srcSize) {
-					n= srcSize - j + srcSize - 1;
-				} else {
-					n= j;
-				}
-				int k= arrN[i];
-				arrN[i]++;
-				if (n < 0 || n >= srcSize) {
-					weight= 0.0f;// Flag that cell should not be used
-				}
-				arrPixel[subindex +k]= n;
-				arrWeight[subindex + k]= weight;
-			}
-			// normalize the filter's weight's so the sum equals to 1.0, very important for avoiding box type of artifacts
-			final int max= arrN[i];
-			float tot= 0;
-			for (int k= 0; k < max; k++)
-				tot+= arrWeight[subindex + k];
-			if (tot != 0f) {
-				for (int k= 0; k < max; k++)
-					arrWeight[subindex + k]/= tot;
-			}
-		}
-		
-		return new SubSamplingData(arrN, arrPixel, arrWeight, numContributors);
+		return new SubSamplingData(filter, srcSize, dstSize);
 	}
 
 	private void verticalFromWorkToDst(byte[][] workPixels, byte[] outPixels, int start, int delta) {
