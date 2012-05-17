@@ -16,6 +16,15 @@
  */
 package com.mortennobel.imagescaling;
 
+import java.awt.Graphics2D;
+import java.awt.image.BufferedImage;
+import java.awt.image.Raster;
+import java.awt.image.WritableRaster;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+
 import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
 import javax.imageio.ImageReader;
@@ -25,12 +34,6 @@ import javax.imageio.stream.ImageInputStream;
 import javax.imageio.stream.ImageOutputStream;
 import javax.imageio.stream.MemoryCacheImageInputStream;
 import javax.imageio.stream.MemoryCacheImageOutputStream;
-import java.awt.Graphics2D;
-import java.awt.image.BufferedImage;
-import java.awt.image.Raster;
-import java.awt.image.WritableRaster;
-import java.io.*;
-import java.util.Iterator;
 
 /**
  * @author Heinz Doerr
@@ -266,8 +269,7 @@ public class ImageUtils {
 	 */
 	public static void copyJpegMetaData(InputStream source, InputStream dest, ImageOutputStream out) throws IOException {
 		// Read meta data from src image
-		Iterator iter = ImageIO.getImageReadersByFormatName("jpeg");
-		ImageReader reader=(ImageReader) iter.next();
+		ImageReader reader = ImageIO.getImageReadersByFormatName("jpeg").next();
 		ImageInputStream iis = new MemoryCacheImageInputStream(source);
 		reader.setInput(iis);
 		IIOMetadata metadata = reader.getImageMetadata(0);
@@ -279,8 +281,7 @@ public class ImageUtils {
 		image.setMetadata(metadata);
 		outIis.close();
 		// write dest image
-		iter = ImageIO.getImageWritersByFormatName("jpeg");
-		ImageWriter writer=(ImageWriter) iter.next();
+		ImageWriter writer = ImageIO.getImageWritersByFormatName("jpeg").next();
 		writer.setOutput(out);
 		writer.write(image);
 	}
