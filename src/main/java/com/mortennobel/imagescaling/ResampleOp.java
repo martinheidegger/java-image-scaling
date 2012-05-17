@@ -207,104 +207,65 @@ public class ResampleOp extends AdvancedResizeOp
 		int numContributors;
 		float[] arrWeight;
 		int[] arrPixel;
-
+		
 		final float fwidth= filter.getSamplingRadius();
-
 		float centerOffset = 0.5f/scale;
-
+		
+		
+		float width;
+		float fNormFac;
+		int excessContributors;
 		if (scale < 1.0f) {
-			final float width= fwidth / scale;
-			numContributors= (int)(width * 2.0f + 2); // Heinz: added 1 to be save with the ceilling
-			arrWeight= new float[dstSize * numContributors];
-			arrPixel= new int[dstSize * numContributors];
-
-			final float fNormFac= (float)(1f / (Math.ceil(width) / fwidth));
-			//
-			for (int i= 0; i < dstSize; i++) {
-				final int subindex= i * numContributors;
-				float center= i / scale + centerOffset;
-				int left= (int)Math.floor(center - width);
-				int right= (int)Math.ceil(center + width);
-				for (int j= left; j <= right; j++) {
-					float weight;
-					weight= filter.apply((center - j) * fNormFac);
-
-					if (weight == 0.0f) {
-						continue;
-					}
-					int n;
-					if (j < 0) {
-						n= -j;
-					} else if (j >= srcSize) {
-						n= srcSize - j + srcSize - 1;
-					} else {
-						n= j;
-					}
-					int k= arrN[i];
-					//assert k == j-left:String.format("%s = %s %s", k,j,left);
-					arrN[i]++;
-					if (n < 0 || n >= srcSize) {
-						weight= 0.0f;// Flag that cell should not be used
-					}
-					arrPixel[subindex +k]= n;
-					arrWeight[subindex + k]= weight;
+			width= fwidth / scale;
+			fNormFac= (float)(1f / (Math.ceil(width) / fwidth));
+			excessContributors = 2; // Heinz: added 1 to be save with the ceilling
+		} else {
+			width = fwidth;
+			fNormFac = 1.0f;
+			excessContributors = 1;
+		}
+		
+		
+		numContributors= (int)(width * 2 + excessContributors);
+		arrWeight= new float[dstSize * numContributors];
+		arrPixel= new int[dstSize * numContributors];
+		for (int i= 0; i < dstSize; i++) {
+			final int subindex= i * numContributors;
+			float center= i / scale + centerOffset;
+			int left= (int)Math.floor(center - width);
+			int right= (int)Math.ceil(center + width);
+			for (int j= left; j <= right; j++) {
+				float weight= filter.apply((center - j) * fNormFac);
+				if (weight == 0.0f) {
+					continue;
 				}
-				// normalize the filter's weight's so the sum equals to 1.0, very important for avoiding box type of artifacts
-				final int max= arrN[i];
-				float tot= 0;
-				for (int k= 0; k < max; k++)
-					tot+= arrWeight[subindex + k];
-				if (tot != 0f) { // 0 should never happen except bug in filter
-					for (int k= 0; k < max; k++)
-						arrWeight[subindex + k]/= tot;
+				int n;
+				if (j < 0) {
+					n= -j;
+				} else if (j >= srcSize) {
+					n= srcSize - j + srcSize - 1;
+				} else {
+					n= j;
 				}
+				int k= arrN[i];
+				arrN[i]++;
+				if (n < 0 || n >= srcSize) {
+					weight= 0.0f;// Flag that cell should not be used
+				}
+				arrPixel[subindex +k]= n;
+				arrWeight[subindex + k]= weight;
 			}
-		} else
-			// super-sampling
-			// Scales from smaller to bigger height
-		{
-			numContributors= (int)(fwidth * 2.0f + 1);
-			arrWeight= new float[dstSize * numContributors];
-			arrPixel= new int[dstSize * numContributors];
-			//
-			for (int i= 0; i < dstSize; i++) {
-				final int subindex= i * numContributors;
-				float center= i / scale + centerOffset;
-				int left= (int)Math.floor(center - fwidth);
-				int right= (int)Math.ceil(center + fwidth);
-				for (int j= left; j <= right; j++) {
-					float weight= filter.apply(center - j);
-					if (weight == 0.0f) {
-						continue;
-					}
-					int n;
-					if (j < 0) {
-						n= -j;
-					} else if (j >= srcSize) {
-						n= srcSize - j + srcSize - 1;
-					} else {
-						n= j;
-					}
-					int k= arrN[i];
-					arrN[i]++;
-					if (n < 0 || n >= srcSize) {
-						weight= 0.0f;// Flag that cell should not be used
-					}
-					arrPixel[subindex +k]= n;
-					arrWeight[subindex + k]= weight;
-				}
-				// normalize the filter's weight's so the sum equals to 1.0, very important for avoiding box type of artifacts
-				final int max= arrN[i];
-				float tot= 0;
+			// normalize the filter's weight's so the sum equals to 1.0, very important for avoiding box type of artifacts
+			final int max= arrN[i];
+			float tot= 0;
+			for (int k= 0; k < max; k++)
+				tot+= arrWeight[subindex + k];
+			if (tot != 0f) {
 				for (int k= 0; k < max; k++)
-					tot+= arrWeight[subindex + k];
-				assert tot!=0:"should never happen except bug in filter";
-				if (tot != 0f) {
-					for (int k= 0; k < max; k++)
-						arrWeight[subindex + k]/= tot;
-				}
+					arrWeight[subindex + k]/= tot;
 			}
 		}
+		
 		return new SubSamplingData(arrN, arrPixel, arrWeight, numContributors);
 	}
 
