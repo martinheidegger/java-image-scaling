@@ -32,7 +32,7 @@ public class ResampleOp extends AdvancedResizeOp
 {
 	private final int MAX_CHANNEL_VALUE= 255;
 
-	private int amountChannels;
+	private int nrChannels;
 	private int srcWidth;
 	private int srcHeight;
 	private int dstWidth;
@@ -170,7 +170,7 @@ public class ResampleOp extends AdvancedResizeOp
 		this.numberOfThreads = numberOfThreads;
 	}
 
-	public BufferedImage doFilter(BufferedImage srcImg, BufferedImage dest, int dstWidth, int dstHeight) {
+	public BufferedImage doFilter(BufferedImage srcImg, BufferedImage dstImg, int dstWidth, int dstHeight) {
 		
 		assert multipleInvocationLock.incrementAndGet()==1:"Multiple concurrent invocations detected";
 		
@@ -178,10 +178,25 @@ public class ResampleOp extends AdvancedResizeOp
 			throw new RuntimeException("Error doing rescale. Target size was "+dstWidth+"x"+dstHeight+" but must be at least 3x3.");
 		}
 		
-		srcImg = assertProcessableImageType(srcImg);
+		if( isNotProcessableImageType(srcImg) ) {
+			srcImg = convertToProcessableImage(srcImg);
+		}
 		
-		amountChannels = ImageUtils.nrChannels(srcImg);
-		assert amountChannels > 0;
+		nrChannels = ImageUtils.nrChannels(srcImg);
+		assert nrChannels > 0;
+		
+		if (dstImg!=null && dstWidth==dstImg.getWidth() && dstHeight==dstImg.getHeight()){
+			if( isNotProcessableImageType(dstImg) ) {
+				dstImg = convertToProcessableImage(dstImg);
+			}
+			int nrDestChannels = ImageUtils.nrChannels(dstImg);
+			if (nrDestChannels != nrChannels){
+				String errorMgs = String.format("Destination image must be compatible width source image. Source image had %d channels destination image had %d channels", nrChannels, nrDestChannels);
+				throw new RuntimeException(errorMgs);
+			}
+		} else {
+			dstImg = new BufferedImage(dstWidth, dstHeight, getResultBufferedImageType(srcImg));
+		}
 		
 		this.dstWidth = dstWidth;
 		this.dstHeight = dstHeight;
@@ -189,14 +204,14 @@ public class ResampleOp extends AdvancedResizeOp
 		srcWidth = srcImg.getWidth();
 		srcHeight = srcImg.getHeight();
 		
-		byte[][] workPixels = new byte[srcHeight][dstWidth*amountChannels];
+		byte[][] workPixels = new byte[srcHeight][dstWidth*nrChannels];
 		
 		this.processedItems = 0;
 		this.totalItems = srcHeight + dstWidth;
 
 		// Pre-calculate  sub-sampling
 		horizontalSubsamplingData = new SubSamplingData(filter, srcWidth, dstWidth);
-		verticalSubsamplingData = new SubSamplingData(filter,srcHeight, dstHeight);
+		verticalSubsamplingData = new SubSamplingData(filter, srcHeight, dstHeight);
 		
 		final BufferedImage scrImgCopy = srcImg;
 		final byte[][] workPixelsCopy = workPixels;
@@ -212,52 +227,38 @@ public class ResampleOp extends AdvancedResizeOp
 		}
 		horizontallyFromSrcToWork(scrImgCopy, workPixelsCopy,0,numberOfThreads);
 		waitForAllThreads(threads);
-
-		byte[] outPixels = new byte[dstWidth*dstHeight*amountChannels];
+		
+		byte[] outPixels = new byte[dstWidth*dstHeight*nrChannels];
+		
 		// --------------------------------------------------
 		// Apply filter to sample vertically from Work to Dst
 		// --------------------------------------------------
 		final byte[] outPixelsCopy = outPixels;
-		for (int i=1;i<numberOfThreads;i++){
-			final int finalI = i;
-			threads[i-1] = new Thread(new Runnable(){
+		for (int index=1;index<numberOfThreads;index++){
+			final int threadIndex = index;
+			threads[index-1] = new Thread(new Runnable(){
 				public void run(){
-					verticalFromWorkToDst(workPixelsCopy, outPixelsCopy, finalI,numberOfThreads);
+					verticalFromWorkToDst(workPixelsCopy, outPixelsCopy, threadIndex,numberOfThreads);
 				}
 			});
-			threads[i-1].start();
+			threads[index-1].start();
 		}
 		verticalFromWorkToDst(workPixelsCopy, outPixelsCopy, 0,numberOfThreads);
 		waitForAllThreads(threads);
-
+		
 		//noinspection UnusedAssignment
 		workPixels = null; // free memory
-		BufferedImage out;
-		if (dest!=null && dstWidth==dest.getWidth() && dstHeight==dest.getHeight()){
-			out = dest;
-			int nrDestChannels = ImageUtils.nrChannels(dest);
-			if (nrDestChannels != amountChannels){
-				String errorMgs = String.format("Destination image must be compatible width source image. Source image had %d channels destination image had %d channels", amountChannels, nrDestChannels);
-				throw new RuntimeException(errorMgs);
-			}
-		}else{
-			out = new BufferedImage(dstWidth, dstHeight, getResultBufferedImageType(srcImg));
-		}
-
-		ImageUtils.setBGRPixels(outPixels, out, 0, 0, dstWidth, dstHeight);
-
+		
+		ImageUtils.setBGRPixels(outPixels, dstImg, 0, 0, dstWidth, dstHeight);
+		
 		assert multipleInvocationLock.decrementAndGet()==0:"Multiple concurrent invocations detected";
-
-		return out;
+		
+		return dstImg;
 	}
 
-	private BufferedImage assertProcessableImageType(BufferedImage srcImg) {
-		if (isNotProcessableImageType(srcImg)) {
-			return ImageUtils.convert(srcImg, srcImg.getColorModel().hasAlpha() ?
-					BufferedImage.TYPE_4BYTE_ABGR : BufferedImage.TYPE_3BYTE_BGR);
-		} else {
-			return srcImg;
-		}
+	private BufferedImage convertToProcessableImage(BufferedImage srcImg) {
+		return ImageUtils.convert(srcImg, srcImg.getColorModel().hasAlpha() ?
+				BufferedImage.TYPE_4BYTE_ABGR : BufferedImage.TYPE_3BYTE_BGR);
 	}
 
 	private boolean isNotProcessableImageType(BufferedImage srcImg) {
@@ -282,19 +283,19 @@ public class ResampleOp extends AdvancedResizeOp
 	}
 
 	private void verticalFromWorkToDst(byte[][] workPixels, byte[] outPixels, int start, int delta) {
-		if (amountChannels==1){
+		if (nrChannels==1){
 			verticalFromWorkToDstGray(workPixels, outPixels, start,numberOfThreads);
 			return;
 		}
-		boolean useChannel3 = amountChannels>3;
+		boolean useChannel3 = nrChannels>3;
 		for (int x = start; x < dstWidth; x+=delta)
 		{
-			final int xLocation = x*amountChannels;
+			final int xLocation = x*nrChannels;
 			for (int y = dstHeight-1; y >=0 ; y--)
 			{
 				final int yTimesNumContributors = y * verticalSubsamplingData.numContributors;
 				final int max= verticalSubsamplingData.contributionsPerPixels[y];
-				final int sampleLocation = (y*dstWidth+x)*amountChannels;
+				final int sampleLocation = (y*dstWidth+x)*nrChannels;
 
 
 				float sample0 = 0.0f;
@@ -366,13 +367,13 @@ public class ResampleOp extends AdvancedResizeOp
 	 * @param workPixels
 	 */
 	private void horizontallyFromSrcToWork(BufferedImage srcImg, byte[][] workPixels, int start, int delta) {
-		if (amountChannels==1){
+		if (nrChannels==1){
 			horizontallyFromSrcToWorkGray(srcImg, workPixels, start, delta);
 			return;
 		}
 		final int[] tempPixels = new int[srcWidth];   // Used if we work on int based bitmaps, later used to keep channel values
-		final byte[] srcPixels = new byte[srcWidth*amountChannels]; // create reusable row to minimize memory overhead
-		final boolean useChannel3 = amountChannels>3;
+		final byte[] srcPixels = new byte[srcWidth*nrChannels]; // create reusable row to minimize memory overhead
+		final boolean useChannel3 = nrChannels>3;
 
 
 		for (int k = start; k < srcHeight; k=k+delta)
@@ -381,7 +382,7 @@ public class ResampleOp extends AdvancedResizeOp
 
 			for (int i = dstWidth-1;i>=0 ; i--)
 			{
-				int sampleLocation = i*amountChannels;
+				int sampleLocation = i*nrChannels;
 				final int max = horizontalSubsamplingData.contributionsPerPixels[i];
 
 				float sample0 = 0.0f;
@@ -391,7 +392,7 @@ public class ResampleOp extends AdvancedResizeOp
 				int index= i * horizontalSubsamplingData.numContributors;
 				for (int j= max-1; j >= 0; j--) {
 					float arrWeight = horizontalSubsamplingData.weights[index];
-					int pixelIndex = horizontalSubsamplingData.pickPixels[index]*amountChannels;
+					int pixelIndex = horizontalSubsamplingData.pickPixels[index]*nrChannels;
 
 					sample0 += (srcPixels[pixelIndex]&0xff) * arrWeight;
 					sample1 += (srcPixels[pixelIndex+1]&0xff) * arrWeight;
@@ -468,10 +469,12 @@ public class ResampleOp extends AdvancedResizeOp
 	}
 
 	protected int getResultBufferedImageType(BufferedImage srcImg) {
-		return amountChannels == 3 ? BufferedImage.TYPE_3BYTE_BGR :
-			(amountChannels == 4 ? BufferedImage.TYPE_4BYTE_ABGR :
+		return nrChannels == 3 ? BufferedImage.TYPE_3BYTE_BGR :
+				(nrChannels == 4 ? BufferedImage.TYPE_4BYTE_ABGR :
 				(srcImg.getSampleModel().getDataType() == DataBuffer.TYPE_USHORT ?
-						BufferedImage.TYPE_USHORT_GRAY : BufferedImage.TYPE_BYTE_GRAY));
+						BufferedImage.TYPE_USHORT_GRAY :
+						BufferedImage.TYPE_BYTE_GRAY)
+		);
 	}
 }
 
