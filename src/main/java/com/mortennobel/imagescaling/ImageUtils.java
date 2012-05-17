@@ -159,7 +159,7 @@ public class ImageUtils {
 			if (imageType == BufferedImage.TYPE_INT_BGR) {
 				pixels= bytes2int(bgrPixels, 2, 1, 0);  // bgr -->  bgr
 			} else if (imageType == BufferedImage.TYPE_INT_ARGB ||
-								imageType == BufferedImage.TYPE_INT_ARGB_PRE) {
+					imageType == BufferedImage.TYPE_INT_ARGB_PRE) {
 				pixels= bytes2int(bgrPixels, 3, 0, 1, 2);  // abgr -->  argb
 			} else {
 				pixels= bytes2int(bgrPixels, 0, 1, 2);  // bgr -->  rgb
@@ -171,8 +171,8 @@ public class ImageUtils {
 			}
 			if (imageType == BufferedImage.TYPE_INT_ARGB ||
 					imageType == BufferedImage.TYPE_INT_RGB ||
-						imageType == BufferedImage.TYPE_INT_ARGB_PRE ||
-						imageType == BufferedImage.TYPE_INT_BGR) {
+					imageType == BufferedImage.TYPE_INT_ARGB_PRE ||
+					imageType == BufferedImage.TYPE_INT_BGR) {
 				raster.setDataElements(x, y, w, h, pixels);
 			} else {
 				// Unmanages the image
@@ -188,9 +188,9 @@ public class ImageUtils {
 			int value= in[i];
 			out[index + index1]= (byte)value;
 			value= value >> 8;
-			out[index + index2]= (byte)value;
-			value= value >> 8;
-			out[index + index3]= (byte)value;
+		out[index + index2]= (byte)value;
+		value= value >> 8;
+		out[index + index3]= (byte)value;
 		}
 	}
 
@@ -200,11 +200,11 @@ public class ImageUtils {
 			int value= in[i];
 			out[index + index1]= (byte)value;
 			value= value >> 8;
-			out[index + index2]= (byte)value;
-			value= value >> 8;
-			out[index + index3]= (byte)value;
-			value= value >> 8;
-			out[index + index4]= (byte)value;
+		out[index + index2]= (byte)value;
+		value= value >> 8;
+		out[index + index3]= (byte)value;
+		value= value >> 8;
+		out[index + index4]= (byte)value;
 		}
 	}
 
@@ -241,47 +241,47 @@ public class ImageUtils {
 		return img;
 	}
 
-    /**
-     * Copy jpeg meta data (exif) from source to dest and save it to out.
-     *
-     * @param source
-     * @param dest
-     * @return result
-     * @throws IOException
-     */
-    public static byte[] copyJpegMetaData(byte[] source, byte[] dest) throws IOException {
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        ImageOutputStream out = new MemoryCacheImageOutputStream(baos);
-        copyJpegMetaData(new ByteArrayInputStream(source),new ByteArrayInputStream(dest), out);
-        return baos.toByteArray();
-    }
+	/**
+	 * Copy jpeg meta data (exif) from source to dest and save it to out.
+	 *
+	 * @param source
+	 * @param dest
+	 * @return result
+	 * @throws IOException
+	 */
+	public static byte[] copyJpegMetaData(byte[] source, byte[] dest) throws IOException {
+		ByteArrayOutputStream baos = new ByteArrayOutputStream();
+		ImageOutputStream out = new MemoryCacheImageOutputStream(baos);
+		copyJpegMetaData(new ByteArrayInputStream(source),new ByteArrayInputStream(dest), out);
+		return baos.toByteArray();
+	}
 
-    /**
-     * Copy jpeg meta data (exif) from source to dest and save it to out
-     *
-     * @param source
-     * @param dest
-     * @param out
-     * @throws IOException
-     */
-    public static void copyJpegMetaData(InputStream source, InputStream dest, ImageOutputStream out) throws IOException {
-        // Read meta data from src image
-        Iterator iter = ImageIO.getImageReadersByFormatName("jpeg");
-        ImageReader reader=(ImageReader) iter.next();
-        ImageInputStream iis = new MemoryCacheImageInputStream(source);
-        reader.setInput(iis);
-        IIOMetadata metadata = reader.getImageMetadata(0);
-        iis.close();
-        // Read dest image
-        ImageInputStream outIis = new MemoryCacheImageInputStream(dest);
-        reader.setInput(outIis);
-        IIOImage image = reader.readAll(0,null);
-        image.setMetadata(metadata);
-        outIis.close();
-        // write dest image
-        iter = ImageIO.getImageWritersByFormatName("jpeg");
-        ImageWriter writer=(ImageWriter) iter.next();
-        writer.setOutput(out);
-        writer.write(image);
-    }
+	/**
+	 * Copy jpeg meta data (exif) from source to dest and save it to out
+	 *
+	 * @param source
+	 * @param dest
+	 * @param out
+	 * @throws IOException
+	 */
+	public static void copyJpegMetaData(InputStream source, InputStream dest, ImageOutputStream out) throws IOException {
+		// Read meta data from src image
+		Iterator iter = ImageIO.getImageReadersByFormatName("jpeg");
+		ImageReader reader=(ImageReader) iter.next();
+		ImageInputStream iis = new MemoryCacheImageInputStream(source);
+		reader.setInput(iis);
+		IIOMetadata metadata = reader.getImageMetadata(0);
+		iis.close();
+		// Read dest image
+		ImageInputStream outIis = new MemoryCacheImageInputStream(dest);
+		reader.setInput(outIis);
+		IIOImage image = reader.readAll(0,null);
+		image.setMetadata(metadata);
+		outIis.close();
+		// write dest image
+		iter = ImageIO.getImageWritersByFormatName("jpeg");
+		ImageWriter writer=(ImageWriter) iter.next();
+		writer.setOutput(out);
+		writer.write(image);
+	}
 }

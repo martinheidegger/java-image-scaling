@@ -45,7 +45,7 @@ public abstract class AdvancedResizeOp implements BufferedImageOp {
 	}
 	private List<ProgressListener> listeners = new ArrayList<ProgressListener>();
 
-    private final DimensionConstrain dimensionConstrain;
+	private final DimensionConstrain dimensionConstrain;
 	private UnsharpenMask unsharpenMask = UnsharpenMask.None;
 
 	public AdvancedResizeOp(DimensionConstrain dimensionConstrain) {
@@ -61,20 +61,20 @@ public abstract class AdvancedResizeOp implements BufferedImageOp {
 	}
 
 	protected void fireProgressChanged(float fraction){
-        for (ProgressListener progressListener:listeners){
-            progressListener.notifyProgress(fraction);
-        }
-    }
+		for (ProgressListener progressListener:listeners){
+			progressListener.notifyProgress(fraction);
+		}
+	}
 
-    public final void addProgressListener(ProgressListener progressListener) {
-        listeners.add(progressListener);
-    }
+	public final void addProgressListener(ProgressListener progressListener) {
+		listeners.add(progressListener);
+	}
 
-    public final boolean removeProgressListener(ProgressListener progressListener) {
-        return listeners.remove(progressListener);
-    }
+	public final boolean removeProgressListener(ProgressListener progressListener) {
+		return listeners.remove(progressListener);
+	}
 
-    public final BufferedImage filter(BufferedImage src, BufferedImage dest){
+	public final BufferedImage filter(BufferedImage src, BufferedImage dest){
 		Dimension dstDimension = dimensionConstrain.getDimension(new  Dimension(src.getWidth(),src.getHeight()));
 		int dstWidth = dstDimension.width;
 		int dstHeight = dstDimension.height;
@@ -94,37 +94,37 @@ public abstract class AdvancedResizeOp implements BufferedImageOp {
 	protected abstract BufferedImage doFilter(BufferedImage src, BufferedImage dest, int dstWidth, int dstHeight);
 
 	/**
-     * {@inheritDoc}
-     */
-    public final Rectangle2D getBounds2D(BufferedImage src) {
-        return new Rectangle(0, 0, src.getWidth(), src.getHeight());
-    }
+	 * {@inheritDoc}
+	 */
+	 public final Rectangle2D getBounds2D(BufferedImage src) {
+		 return new Rectangle(0, 0, src.getWidth(), src.getHeight());
+	 }
 
-    /**
-     * {@inheritDoc}
-     */
-    public final BufferedImage createCompatibleDestImage(BufferedImage src,
-                                                   ColorModel destCM) {
-        if (destCM == null) {
-            destCM = src.getColorModel();
-        }
-        return new BufferedImage(destCM,
-                                 destCM.createCompatibleWritableRaster(
-                                         src.getWidth(), src.getHeight()),
-                                 destCM.isAlphaPremultiplied(), null);
-    }
+	 /**
+	  * {@inheritDoc}
+	  */
+	 public final BufferedImage createCompatibleDestImage(BufferedImage src,
+			 ColorModel destCM) {
+		 if (destCM == null) {
+			 destCM = src.getColorModel();
+		 }
+		 return new BufferedImage(destCM,
+				 destCM.createCompatibleWritableRaster(
+						 src.getWidth(), src.getHeight()),
+						 destCM.isAlphaPremultiplied(), null);
+	 }
 
-    /**
-     * {@inheritDoc}
-     */
-    public final Point2D getPoint2D(Point2D srcPt, Point2D dstPt) {
-        return (Point2D) srcPt.clone();
-    }
+	 /**
+	  * {@inheritDoc}
+	  */
+	 public final Point2D getPoint2D(Point2D srcPt, Point2D dstPt) {
+		 return (Point2D) srcPt.clone();
+	 }
 
-    /**
-     * {@inheritDoc}
-     */
-    public final RenderingHints getRenderingHints() {
-        return null;
-    }
+	 /**
+	  * {@inheritDoc}
+	  */
+	 public final RenderingHints getRenderingHints() {
+		 return null;
+	 }
 }

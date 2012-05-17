@@ -17,7 +17,7 @@
 package com.mortennobel.imagescaling;
 
 final class Lanczos3Filter implements ResampleFilter {
-    private final static float PI_FLOAT = (float) Math.PI;
+	private final static float PI_FLOAT = (float) Math.PI;
 
 	private float sincModified(float value)
 	{
@@ -45,11 +45,11 @@ final class Lanczos3Filter implements ResampleFilter {
 		}
 	}
 
-    public float getSamplingRadius() {
-        return 3.0f;
-    }
+	public float getSamplingRadius() {
+		return 3.0f;
+	}
 
-    public String getName()
+	public String getName()
 	{
 		return "Lanczos3";
 	}
