@@ -1,0 +1,5 @@
+bin/*
+build/*
+dist/*
+test-result/*
+libs/filters/dist/Filters.jar
