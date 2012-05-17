@@ -39,10 +39,6 @@ public class Issue5 extends TestCase {
 	public void testSRGB() throws Exception{
 		try {  
 			// Read the original image from the Server Location
-			String[] fileTypes = {"jpg","png","JPG","GIF"};
-			boolean bFlag = false;
-
-			bFlag = false;
 
 			int fixlength = 1600;
 			int calcHeight = 0;
@@ -55,18 +51,16 @@ public class Issue5 extends TestCase {
 				if(bufferedImage.getHeight() > 1600){
 					calcWidth = fixlength * bufferedImage.getWidth() / bufferedImage.getHeight();
 					calcHeight = 1600;
-					bFlag = true;
 				}
 				else{
 					calcWidth = bufferedImage.getWidth();
-					calcHeight  = bufferedImage.getHeight();
+					calcHeight = bufferedImage.getHeight();
 				}
 			}
 			else{
 				if( bufferedImage.getWidth() > 1600){
 					calcHeight = fixlength * bufferedImage.getHeight() / bufferedImage.getWidth();
 					calcWidth = 1600;
-					bFlag = true;
 				}
 				else{
 					calcWidth = bufferedImage.getWidth();
@@ -77,7 +71,6 @@ public class Issue5 extends TestCase {
 			BufferedImage rescaledImage = createResizedCopy(bufferedImage, calcWidth, calcHeight);
 			int res = JOptionPane.showConfirmDialog(null, "Do you see a scaled image?", "", JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE, new ImageIcon(rescaledImage));
 			assertEquals(JOptionPane.YES_OPTION ,res);
-
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
@@ -99,8 +92,8 @@ public class Issue5 extends TestCase {
 		ImageReadParam param =reader.getDefaultReadParam();
 
 		ImageTypeSpecifier typeToUse = null;
-		for (Iterator i = reader.getImageTypes(0);i.hasNext(); ) {
-			ImageTypeSpecifier type = (ImageTypeSpecifier) i.next();
+		for (Iterator<ImageTypeSpecifier> i = reader.getImageTypes(0);i.hasNext(); ) {
+			ImageTypeSpecifier type = i.next();
 			if (type.getColorModel().getColorSpace().isCS_sRGB())
 				typeToUse = type;
 		}

@@ -11,6 +11,7 @@ import org.junit.Before;
 import javax.imageio.ImageIO;
 
 public class TestThumbnailRescaleOp {
+	
 	@Test
 	public void test1Sample(){
 		BufferedImage bi = new BufferedImage(3,3,BufferedImage.TYPE_INT_ARGB);
@@ -27,7 +28,7 @@ public class TestThumbnailRescaleOp {
 		assertNotNull(scaledImage);
 		assertEquals(scaledImage.getRGB(0,0), Color.red.getRGB());
 	}
-
+	
 	@Test
 	public void test1SampleLarge(){
 		BufferedImage bi = new BufferedImage(7,7,BufferedImage.TYPE_INT_ARGB);
@@ -52,7 +53,7 @@ public class TestThumbnailRescaleOp {
 		}
 		new Color(255,255,255);
 	}
-
+	
 	@Test
 	public void test2x2RGSS(){
 		BufferedImage bi = new BufferedImage(4,4,BufferedImage.TYPE_INT_ARGB);
@@ -72,7 +73,7 @@ public class TestThumbnailRescaleOp {
 		assertEquals(color.getGreen(),0);
 		assertEquals(color.getRed(),255/4);
 	}
-
+	
 	/*@Test 
 	public void test8Rooks(){
 		BufferedImage bi = new BufferedImage(6,6,BufferedImage.TYPE_INT_ARGB);
@@ -117,7 +118,7 @@ public class TestThumbnailRescaleOp {
 	public void largeThumpRescale(){
 		// used for measure speed
 		ThumbnailRescaleOp multiStepRescale = new ThumbnailRescaleOp(50,50);
-		BufferedImage bufferedImage2 = multiStepRescale.filter(bufferedImage, null);
+		multiStepRescale.filter(bufferedImage, null);
 	}
 
 	@Test
