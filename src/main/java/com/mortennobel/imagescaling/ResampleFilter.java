@@ -18,8 +18,12 @@ package com.mortennobel.imagescaling;
 
 public interface ResampleFilter {
 	public float getSamplingRadius();
-
-	float apply(float v);
-
+	
+	/**
+	 * @param pixelPosition Position to check for its power
+	 * @return Weight of the current offset 
+	 */
+	float apply(float pixelPosition);
+	
 	public abstract String getName();
 }
