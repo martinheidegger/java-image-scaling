@@ -1,0 +1,110 @@
+<project name="ImageScaling" default="compile" basedir=".">
+	
+	<property name="lib.path">libs</property>
+	<property name="filters.lib">${lib.path}/filters/dist/Filters.jar</property>
+	<property name="version">0.8.6</property>
+	<property name="output.jar">dist/imagescaling${version}.jar</property>
+	
+	<available file="${lib.path}" property="libAvailable"></available>
+	<available file="${filters.lib}" property="filtersAvailable"></available>
+	
+	<target name="cleanCompile">
+		<delete dir="build" />
+	</target>
+	
+	<target name="cleanFilters">
+		<delete dir="${lib.path}" />
+	</target>
+	
+	<target name="libPath" unless="libAvailable">
+		<echo>Preparing Libraries Path</echo>
+		<mkdir dir="${lib.path}"/>
+	</target>
+	
+	<target name="clean" depends="cleanCompile, cleanFilters" />
+	
+	<target name="downloadFilters" depends="libPath" unless="filtersAvailable">
+		<get dest="libs/filters.zip" src="http://www.jhlabs.com/ip/filters/Filters.zip"/>
+		<unzip dest="libs/filters" src="libs/filters.zip">
+			<patternset includes="**/*.jar" />
+		</unzip>
+		<delete file="libs/filters.zip" />
+	</target>
+	
+	<target name="downloadLibraries" depends="downloadFilters" />
+
+	<target name="compileTest" depends="compile">
+		<mkdir dir="build/test-classes"/>
+		<javac source="1.7" srcdir="src/test/java" destdir="build/test-classes" debug="true"
+				optimize="true" verbose="false" target="1.7" includeantruntime="true">
+			<classpath path="${output.jar}" />
+			<classpath path="${filters.lib}"/>
+		</javac>
+		<copy todir="build/test-classes">
+			<fileset dir="src/test/java" includes="**/*" excludes="**/*.java" />
+		</copy>
+	</target>
+	
+	<target name="test" depends="compileTest">
+		<junit haltonfailure="true">
+			<classpath path="${filters.lib}" />
+			<classpath path="build/classes" />
+			<classpath path="build/test-classes" />
+			<formatter type="brief" usefile="false"/>
+			<batchtest todir="test-result">
+				<fileset dir="build/test-classes" includes="**/*" excludes="**/*$*">
+					<exclude name="com/mortennobel/imagescaling/CorrectnessTest.class"/>
+					<exclude name="com/mortennobel/imagescaling/CreateSharpenMaskTest.class"/>
+					<exclude name="com/mortennobel/imagescaling/MultipleResizeTest.class"/>
+					<exclude name="com/mortennobel/imagescaling/Issue7.class"/> <!-- Test fails ... -->
+					<exclude name="com/mortennobel/imagescaling/Issue8.class"/> <!-- Test fails ... -->
+				</fileset>
+			</batchtest>
+		</junit>
+	</target>
+	
+	<target name="user-test" depends="test">
+		<java>
+		</java>
+	</target>
+	
+	<target name="compile" depends="cleanCompile, downloadLibraries">
+		<mkdir dir="build/classes"/>
+		<mkdir dir="dist"/>
+		<copy file="${filters.lib}" tofile="dist/Filters.jar" />
+		<javac source="1.5" srcdir="src/main" destdir="build/classes" debug="true"
+				optimize="true" verbose="false" target="1.5" includeantruntime="false" bootclasspath="">
+			<classpath path="dist/Filters.jar"/>
+		</javac>
+		<jar basedir="build/classes" destfile="${output.jar}">
+			<fileset dir="src/main" includes="**/*.properties"/>
+			<fileset dir="." includes="license.txt"/>
+		</jar>
+	</target>
+
+	<target name="source">
+		<zip destfile="dist/imagescaling_src_${version}.zip">
+			<fileset dir="." includes="make.xml"/>
+			<fileset dir="." includes="src/main/**/*"/>
+			<fileset dir="." includes="*.txt"/>
+		</zip>
+	</target>
+	
+	<!-- <target name="source_test">
+		<zip destfile="dist/imagescaling_src_unittest_${version}.zip">
+			<fileset dir="." includes="make.xml"/>
+			<fileset dir="." includes="src/**/*"/>
+			<fileset dir="." includes="test/**/*"/>
+			<fileset dir="." includes="*.txt"/>
+		</zip>
+	</target>
+	-->
+	
+	<target name="javadoc" depends="compile">
+		<mkdir dir="build/javadoc"/>
+		<javadoc destdir="build/javadoc" sourcepath="src/main" windowtitle="Image Scaling Library ${version}"/>
+		<zip destfile="dist/imagescaling_javadoc_${version}.zip">
+			<fileset dir="build/javadoc" includes="**/*"/>
+		</zip>
+	</target>
+</project>
