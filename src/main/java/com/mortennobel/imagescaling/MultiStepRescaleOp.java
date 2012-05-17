@@ -46,15 +46,15 @@ public class MultiStepRescaleOp extends AdvancedResizeOp {
 		super(dimensionConstain);
 		this.renderingHintInterpolation = renderingHintInterpolation;
 		assert RenderingHints.KEY_INTERPOLATION.isCompatibleValue(renderingHintInterpolation) :
-				"Rendering hint "+renderingHintInterpolation+" is not compatible with interpolation";
+			"Rendering hint "+renderingHintInterpolation+" is not compatible with interpolation";
 	}
 
 
 	public BufferedImage doFilter(BufferedImage img, BufferedImage dest, int dstWidth, int dstHeight) {
-        int type = (img.getTransparency() == Transparency.OPAQUE) ?
-                BufferedImage.TYPE_INT_RGB : BufferedImage.TYPE_INT_ARGB;
-        BufferedImage ret = img;
-        int w, h;
+		int type = (img.getTransparency() == Transparency.OPAQUE) ?
+				BufferedImage.TYPE_INT_RGB : BufferedImage.TYPE_INT_ARGB;
+		BufferedImage ret = img;
+		int w, h;
 
 		// Use multi-step technique: start with original size, then
 		// scale down in multiple passes with drawImage()
@@ -62,39 +62,39 @@ public class MultiStepRescaleOp extends AdvancedResizeOp {
 		w = img.getWidth();
 		h = img.getHeight();
 
-        do {
-            if (w > dstWidth) {
-                w /= 2;
-                if (w < dstWidth) {
-                    w = dstWidth;
-                }
-            } else {
-                w = dstWidth;
-            }
+		do {
+			if (w > dstWidth) {
+				w /= 2;
+				if (w < dstWidth) {
+					w = dstWidth;
+				}
+			} else {
+				w = dstWidth;
+			}
 
-            if (h > dstHeight) {
-                h /= 2;
-                if (h < dstHeight) {
-                    h = dstHeight;
-                }
-            } else {
-                h = dstHeight;
-            }
+			if (h > dstHeight) {
+				h /= 2;
+				if (h < dstHeight) {
+					h = dstHeight;
+				}
+			} else {
+				h = dstHeight;
+			}
 
-            BufferedImage tmp;
+			BufferedImage tmp;
 			if (dest!=null && dest.getWidth()== w && dest.getHeight()== h && w==dstWidth && h==dstHeight){
 				tmp = dest;
 			} else {
 				tmp = new BufferedImage(w,h,type);
 			}
 			Graphics2D g2 = tmp.createGraphics();
-            g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, renderingHintInterpolation);
-            g2.drawImage(ret, 0, 0, w, h, null);
-            g2.dispose();
+			g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, renderingHintInterpolation);
+			g2.drawImage(ret, 0, 0, w, h, null);
+			g2.dispose();
 
-            ret = tmp;
-        } while (w != dstWidth || h != dstHeight);
+			ret = tmp;
+		} while (w != dstWidth || h != dstHeight);
 
-        return ret;
-    }
+		return ret;
+	}
 }

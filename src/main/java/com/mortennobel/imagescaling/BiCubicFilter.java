@@ -47,11 +47,11 @@ class BiCubicFilter implements ResampleFilter {
 		return 0.0f;
 	}
 
-    public float getSamplingRadius() {
-        return 2.0f;
-    }
+	public float getSamplingRadius() {
+		return 2.0f;
+	}
 
-    public String getName()
+	public String getName()
 	{
 		return "BiCubic"; // also called cardinal cubic spline
 	}
