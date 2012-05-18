@@ -37,8 +37,9 @@ public abstract class AdvancedResizeOp implements BufferedImageOp {
 		Normal(0.3f),
 		VerySharp(0.45f),
 		Oversharpened(0.60f);
+		
 		private final float factor;
-
+		
 		UnsharpenMask(float factor) {
 			this.factor = factor;
 		}
@@ -78,17 +79,24 @@ public abstract class AdvancedResizeOp implements BufferedImageOp {
 		Dimension dstDimension = dimensionConstrain.getDimension(new  Dimension(src.getWidth(),src.getHeight()));
 		int dstWidth = dstDimension.width;
 		int dstHeight = dstDimension.height;
+		
 		BufferedImage bufferedImage = doFilter(src, dest, dstWidth, dstHeight);
-
-		if (unsharpenMask!= UnsharpenMask.None){
-			UnsharpFilter unsharpFilter= new UnsharpFilter();
-			unsharpFilter.setRadius(2f);
-			unsharpFilter.setAmount(unsharpenMask.factor);
-			unsharpFilter.setThreshold(10);
-			return  unsharpFilter.filter(bufferedImage, null);
+		
+		float unsharpFactor = Math.abs(unsharpenMask.factor);
+		if (unsharpFactor != 0f){
+			return applyUnsharpMask(bufferedImage, unsharpFactor);
+		} else {
+			return bufferedImage;
 		}
-
-		return bufferedImage;
+	}
+	
+	private BufferedImage applyUnsharpMask(BufferedImage bufferedImage,
+			float unsharpFactor) {
+		UnsharpFilter unsharpFilter= new UnsharpFilter();
+		unsharpFilter.setRadius(2f);
+		unsharpFilter.setAmount(unsharpFactor);
+		unsharpFilter.setThreshold(10);
+		return  unsharpFilter.filter(bufferedImage, null);
 	}
 
 	protected abstract BufferedImage doFilter(BufferedImage src, BufferedImage dest, int dstWidth, int dstHeight);
