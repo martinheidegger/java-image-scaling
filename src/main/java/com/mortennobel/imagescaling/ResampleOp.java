@@ -37,8 +37,8 @@ public class ResampleOp extends AdvancedResizeOp
 	private int srcHeight;
 	private int dstWidth;
 	private int dstHeight;
-
-	static class SubSamplingData{
+	
+	static class SubSamplingData {
 		private final int[] contributionsPerPixels; // individual - per row or per column - nr of contributions
 		private final int[] pickPixels;  // 2Dim: [wid or hei][contrib]
 		private final float[] weights; // 2Dim: [wid or hei][contrib]
@@ -81,7 +81,7 @@ public class ResampleOp extends AdvancedResizeOp
 				final int subindex = pixel * numContributors;
 				float totalWeight = 0.0f;
 				int currentPixel = (int)(pickPixelCenter - filterSize); // automatic rounding down
-				int endPixel = (int)(pickPixelCenter + filterSize + 1.0); // automatic rounding up
+				int endPixel = (int)(pickPixelCenter + filterSize + 1.0f); // automatic rounding up
 				for (; currentPixel <= endPixel; currentPixel++) {
 					float weight = filter.apply((pickPixelCenter - currentPixel) * filterNormalization);
 					if (weight != 0.0f) {
@@ -96,10 +96,10 @@ public class ResampleOp extends AdvancedResizeOp
 						if (pickPixel < 0 && pickPixel >= srcSize) {
 							weight = 0.0f;
 						}
-						int k = contributionsPerPixels[pixel];
+						int contributionOffset = contributionsPerPixels[pixel];
 						contributionsPerPixels[pixel]++;
-						pickPixels[subindex + k]= pickPixel;
-						weights[subindex + k]= weight;
+						pickPixels[subindex + contributionOffset]= pickPixel;
+						weights[subindex + contributionOffset]= weight;
 						totalWeight += weight;
 					}
 				}
@@ -132,11 +132,15 @@ public class ResampleOp extends AdvancedResizeOp
 			return weights;
 		}
 	}
-
+	
+	static SubSamplingData createSubSampling(ResampleFilter filter, int srcSize, int dstSize) {
+		return new SubSamplingData(filter, srcSize, dstSize);
+	}
+	
 	private SubSamplingData horizontalSubsamplingData;
 	private SubSamplingData verticalSubsamplingData;
 
-	private int processedItems;
+	private AtomicInteger processedItems;
 	private float totalItems;
 
 	private int numberOfThreads = Runtime.getRuntime().availableProcessors();
@@ -144,7 +148,6 @@ public class ResampleOp extends AdvancedResizeOp
 	private AtomicInteger multipleInvocationLock = new AtomicInteger();
 
 	private ResampleFilter filter = ResampleFilters.getLanczos3Filter();
-
 
 	public ResampleOp(int destWidth, int destHeight) {
 		this(DimensionConstrain.createAbsolutionDimension(destWidth, destHeight));
@@ -169,7 +172,7 @@ public class ResampleOp extends AdvancedResizeOp
 	public void setNumberOfThreads(int numberOfThreads) {
 		this.numberOfThreads = numberOfThreads;
 	}
-
+	
 	public BufferedImage doFilter(BufferedImage srcImg, BufferedImage dstImg, int dstWidth, int dstHeight) {
 		
 		assert multipleInvocationLock.incrementAndGet()==1:"Multiple concurrent invocations detected";
@@ -178,17 +181,70 @@ public class ResampleOp extends AdvancedResizeOp
 			throw new RuntimeException("Error doing rescale. Target size was "+dstWidth+"x"+dstHeight+" but must be at least 3x3.");
 		}
 		
-		if( isNotProcessableImageType(srcImg) ) {
-			srcImg = convertToProcessableImage(srcImg);
-		}
+		srcImg = validateImage(srcImg);
 		
 		nrChannels = ImageUtils.nrChannels(srcImg);
+		
 		assert nrChannels > 0;
 		
-		if (dstImg!=null && dstWidth==dstImg.getWidth() && dstHeight==dstImg.getHeight()){
-			if( isNotProcessableImageType(dstImg) ) {
-				dstImg = convertToProcessableImage(dstImg);
-			}
+		dstImg = validateDestinationImage(srcImg, dstImg, dstWidth, dstHeight, nrChannels);
+		
+		this.dstWidth = dstWidth;
+		this.dstHeight = dstHeight;
+		
+		srcWidth = srcImg.getWidth();
+		srcHeight = srcImg.getHeight();
+		processedItems = new AtomicInteger(0);
+		totalItems = srcHeight + dstWidth;
+		
+		horizontalSubsamplingData = new SubSamplingData(filter, srcWidth, dstWidth);
+		verticalSubsamplingData = new SubSamplingData(filter, srcHeight, dstHeight);
+		
+		processFilter(srcImg, dstImg);
+		
+		assert multipleInvocationLock.decrementAndGet()==0:"Multiple concurrent invocations detected";
+		
+		return dstImg;
+	}
+	
+	private void processFilter(BufferedImage srcImg, BufferedImage dstImg) {
+		Thread progressThread = new Thread(new Runnable() { public void run() { checkProgress(); } });
+		progressThread.setName("Progress Thread");
+		progressThread.start();
+		
+		byte[] outPixels = processRemainingVerticalLines(
+			processHorizontalLines(srcImg, new byte[srcHeight][dstWidth*nrChannels]),
+			new byte[dstHeight*dstWidth*nrChannels]
+		);
+		
+		progressThread.interrupt();
+		
+		ImageUtils.setBGRPixels(outPixels, dstImg, 0, 0, dstWidth, dstHeight);
+	}
+	
+	private BufferedImage validateImage(BufferedImage image) {
+		if( isNotProcessableImageType(image) ) {
+			return convertToProcessableImage(image);
+		} else {
+			return image;
+		}
+	}
+	
+	private boolean isNotProcessableImageType(BufferedImage srcImg) {
+		return srcImg.getType() == BufferedImage.TYPE_BYTE_BINARY ||
+			srcImg.getType() == BufferedImage.TYPE_BYTE_INDEXED ||
+			srcImg.getType() == BufferedImage.TYPE_CUSTOM;
+	}
+	
+	private BufferedImage convertToProcessableImage(BufferedImage srcImg) {
+		return ImageUtils.convert(srcImg, srcImg.getColorModel().hasAlpha() ? BufferedImage.TYPE_4BYTE_ABGR : BufferedImage.TYPE_3BYTE_BGR);
+	}
+
+	private BufferedImage validateDestinationImage(BufferedImage srcImg,
+			BufferedImage dstImg, int dstWidth, int dstHeight, int nrChannels) {
+		
+		if (dstImg!=null && dstWidth==dstImg.getWidth() && dstHeight==dstImg.getHeight()) {
+			dstImg = validateImage(dstImg);
 			int nrDestChannels = ImageUtils.nrChannels(dstImg);
 			if (nrDestChannels != nrChannels){
 				String errorMgs = String.format("Destination image must be compatible width source image. Source image had %d channels destination image had %d channels", nrChannels, nrDestChannels);
@@ -197,185 +253,68 @@ public class ResampleOp extends AdvancedResizeOp
 		} else {
 			dstImg = new BufferedImage(dstWidth, dstHeight, getResultBufferedImageType(srcImg));
 		}
-		
-		this.dstWidth = dstWidth;
-		this.dstHeight = dstHeight;
-		
-		srcWidth = srcImg.getWidth();
-		srcHeight = srcImg.getHeight();
-		
-		byte[][] workPixels = new byte[srcHeight][dstWidth*nrChannels];
-		
-		this.processedItems = 0;
-		this.totalItems = srcHeight + dstWidth;
-
-		// Pre-calculate  sub-sampling
-		horizontalSubsamplingData = new SubSamplingData(filter, srcWidth, dstWidth);
-		verticalSubsamplingData = new SubSamplingData(filter, srcHeight, dstHeight);
-		
-		final BufferedImage scrImgCopy = srcImg;
-		final byte[][] workPixelsCopy = workPixels;
-		Thread[] threads = new Thread[numberOfThreads-1];
-		for (int i=1;i<numberOfThreads;i++){
-			final int finalI = i;
-			threads[i-1] = new Thread(new Runnable(){
-				public void run(){
-					horizontallyFromSrcToWork(scrImgCopy, workPixelsCopy,finalI,numberOfThreads);
-				}
-			});
-			threads[i-1].start();
-		}
-		horizontallyFromSrcToWork(scrImgCopy, workPixelsCopy,0,numberOfThreads);
-		waitForAllThreads(threads);
-		
-		byte[] outPixels = new byte[dstWidth*dstHeight*nrChannels];
-		
-		// --------------------------------------------------
-		// Apply filter to sample vertically from Work to Dst
-		// --------------------------------------------------
-		final byte[] outPixelsCopy = outPixels;
-		for (int index=1;index<numberOfThreads;index++){
-			final int threadIndex = index;
-			threads[index-1] = new Thread(new Runnable(){
-				public void run(){
-					verticalFromWorkToDst(workPixelsCopy, outPixelsCopy, threadIndex,numberOfThreads);
-				}
-			});
-			threads[index-1].start();
-		}
-		verticalFromWorkToDst(workPixelsCopy, outPixelsCopy, 0,numberOfThreads);
-		waitForAllThreads(threads);
-		
-		//noinspection UnusedAssignment
-		workPixels = null; // free memory
-		
-		ImageUtils.setBGRPixels(outPixels, dstImg, 0, 0, dstWidth, dstHeight);
-		
-		assert multipleInvocationLock.decrementAndGet()==0:"Multiple concurrent invocations detected";
-		
 		return dstImg;
 	}
-
-	private BufferedImage convertToProcessableImage(BufferedImage srcImg) {
-		return ImageUtils.convert(srcImg, srcImg.getColorModel().hasAlpha() ?
-				BufferedImage.TYPE_4BYTE_ABGR : BufferedImage.TYPE_3BYTE_BGR);
-	}
-
-	private boolean isNotProcessableImageType(BufferedImage srcImg) {
-		return srcImg.getType() == BufferedImage.TYPE_BYTE_BINARY ||
-			srcImg.getType() == BufferedImage.TYPE_BYTE_INDEXED ||
-			srcImg.getType() == BufferedImage.TYPE_CUSTOM;
-	}
-
-	private void waitForAllThreads(Thread[] threads) {
+	
+	private void checkProgress() {
 		try {
-			for (Thread t:threads){
-				t.join(Long.MAX_VALUE);
+			int itemsProcessedBefore = 0;
+			int itemsProcessed;
+			while( (itemsProcessed = processedItems.intValue()) != totalItems ) {
+				if( itemsProcessed != itemsProcessedBefore ) {
+					itemsProcessedBefore = itemsProcessed;
+					fireProgressChanged(itemsProcessed/totalItems);
+				}
+				Thread.currentThread().wait(1);
 			}
 		} catch (InterruptedException e) {
 			e.printStackTrace();
 			throw new RuntimeException(e);
 		}
 	}
-
-	static SubSamplingData createSubSampling(ResampleFilter filter, int srcSize, int dstSize) {
-		return new SubSamplingData(filter, srcSize, dstSize);
-	}
-
-	private void verticalFromWorkToDst(byte[][] workPixels, byte[] outPixels, int start, int delta) {
-		if (nrChannels==1){
-			verticalFromWorkToDstGray(workPixels, outPixels, start,numberOfThreads);
-			return;
-		}
-		boolean useChannel3 = nrChannels>3;
-		for (int x = start; x < dstWidth; x+=delta)
-		{
-			final int xLocation = x*nrChannels;
-			for (int y = dstHeight-1; y >=0 ; y--)
-			{
-				final int yTimesNumContributors = y * verticalSubsamplingData.numContributors;
-				final int max= verticalSubsamplingData.contributionsPerPixels[y];
-				final int sampleLocation = (y*dstWidth+x)*nrChannels;
-
-
-				float sample0 = 0.0f;
-				float sample1 = 0.0f;
-				float sample2 = 0.0f;
-				float sample3 = 0.0f;
-				int index= yTimesNumContributors;
-				for (int j= max-1; j >=0 ; j--) {
-					int valueLocation = verticalSubsamplingData.pickPixels[index];
-					float arrWeight = verticalSubsamplingData.weights[index];
-					sample0+= (workPixels[valueLocation][xLocation]&0xff) *arrWeight ;
-					sample1+= (workPixels[valueLocation][xLocation+1]&0xff) * arrWeight;
-					sample2+= (workPixels[valueLocation][xLocation+2]&0xff) * arrWeight;
-					if (useChannel3){
-						sample3+= (workPixels[valueLocation][xLocation+3]&0xff) * arrWeight;
-					}
-
-					index++;
+	
+	private byte[][] processHorizontalLines(final BufferedImage srcImg, final byte[][] workPixels) {
+		Thread[] threads = new Thread[numberOfThreads];
+		for (int index=0;index<numberOfThreads;index++){
+			final int threadIndex = index;
+			Thread thread = new Thread(new Runnable(){
+				public void run(){
+					horizontallyFromSrcToWork(srcImg, workPixels, threadIndex, numberOfThreads);
 				}
-
-				outPixels[sampleLocation] = toByte(sample0);
-				outPixels[sampleLocation +1] = toByte(sample1);
-				outPixels[sampleLocation +2] = toByte(sample2);
-				if (useChannel3){
-					outPixels[sampleLocation +3] = toByte(sample3);
-				}
-
-			}
-			processedItems++;
-			if (start==0){ // only update progress listener from main thread
-				setProgress();
-			}
+			});
+			threads[index] = thread;
+			thread.setName("Horizontal Runner #"+threadIndex);
+			thread.start();
 		}
+		waitForAll(threads);
+		return workPixels;
 	}
-
-	private void verticalFromWorkToDstGray(byte[][] workPixels, byte[] outPixels, int start, int delta) {
-		for (int x = start; x < dstWidth; x+=delta)
-		{
-			final int xLocation = x;
-			for (int y = dstHeight-1; y >=0 ; y--)
-			{
-				final int yTimesNumContributors = y * verticalSubsamplingData.numContributors;
-				final int max= verticalSubsamplingData.contributionsPerPixels[y];
-				final int sampleLocation = (y*dstWidth+x);
-
-
-				float sample0 = 0.0f;
-				int index= yTimesNumContributors;
-				for (int j= max-1; j >=0 ; j--) {
-					int valueLocation = verticalSubsamplingData.pickPixels[index];
-					float arrWeight = verticalSubsamplingData.weights[index];
-					sample0+= (workPixels[valueLocation][xLocation]&0xff) *arrWeight ;
-
-					index++;
-				}
-
-				outPixels[sampleLocation] = toByte(sample0);
+	
+	private void waitForAll(Thread[] threads) {
+		try {
+			for(Thread thread:threads) {
+				thread.join(Long.MAX_VALUE);
 			}
-			processedItems++;
-			if (start==0){ // only update progress listener from main thread
-				setProgress();
-			}
-		}
+		} catch (InterruptedException e) {
+ 			e.printStackTrace();
+ 			throw new RuntimeException(e);
+ 		}
 	}
-
-	/**
-	 * Apply filter to sample horizontally from Src to Work
-	 * @param srcImg
-	 * @param workPixels
-	 */
+	
 	private void horizontallyFromSrcToWork(BufferedImage srcImg, byte[][] workPixels, int start, int delta) {
 		if (nrChannels==1){
-			horizontallyFromSrcToWorkGray(srcImg, workPixels, start, delta);
-			return;
+			horizontallyFromSrcToWorkGrayScale(srcImg, workPixels, start, delta);
+		} else {
+			horizontallyFromSrcToWorkRGB(srcImg, workPixels, start, delta);
 		}
+	}
+
+	private void horizontallyFromSrcToWorkRGB(BufferedImage srcImg,
+			byte[][] workPixels, int start, int delta) {
 		final int[] tempPixels = new int[srcWidth];   // Used if we work on int based bitmaps, later used to keep channel values
 		final byte[] srcPixels = new byte[srcWidth*nrChannels]; // create reusable row to minimize memory overhead
 		final boolean useChannel3 = nrChannels>3;
-
-
+		
 		for (int k = start; k < srcHeight; k=k+delta)
 		{
 			ImageUtils.getPixelsBGR(srcImg, k, srcWidth, srcPixels, tempPixels);
@@ -384,7 +323,7 @@ public class ResampleOp extends AdvancedResizeOp
 			{
 				int sampleLocation = i*nrChannels;
 				final int max = horizontalSubsamplingData.contributionsPerPixels[i];
-
+				
 				float sample0 = 0.0f;
 				float sample1 = 0.0f;
 				float sample2 = 0.0f;
@@ -393,16 +332,16 @@ public class ResampleOp extends AdvancedResizeOp
 				for (int j= max-1; j >= 0; j--) {
 					float arrWeight = horizontalSubsamplingData.weights[index];
 					int pixelIndex = horizontalSubsamplingData.pickPixels[index]*nrChannels;
-
+					
 					sample0 += (srcPixels[pixelIndex]&0xff) * arrWeight;
 					sample1 += (srcPixels[pixelIndex+1]&0xff) * arrWeight;
-					sample2 += (srcPixels[pixelIndex+2]&0xff)  * arrWeight;
+					sample2 += (srcPixels[pixelIndex+2]&0xff) * arrWeight;
 					if (useChannel3){
-						sample3 += (srcPixels[pixelIndex+3]&0xff)  * arrWeight;
+						sample3 += (srcPixels[pixelIndex+3]&0xff) * arrWeight;
 					}
 					index++;
 				}
-
+				
 				workPixels[k][sampleLocation] = toByte(sample0);
 				workPixels[k][sampleLocation +1] = toByte(sample1);
 				workPixels[k][sampleLocation +2] = toByte(sample2);
@@ -410,71 +349,144 @@ public class ResampleOp extends AdvancedResizeOp
 					workPixels[k][sampleLocation +3] = toByte(sample3);
 				}
 			}
-			processedItems++;
-			if (start==0){ // only update progress listener from main thread
-				setProgress();
-			}
+			processedItems.incrementAndGet();
 		}
 	}
-
-	/**
-	 * Apply filter to sample horizontally from Src to Work
-	 * @param srcImg
-	 * @param workPixels
-	 */
-	private void horizontallyFromSrcToWorkGray(BufferedImage srcImg, byte[][] workPixels, int start, int delta) {
+	
+	private void horizontallyFromSrcToWorkGrayScale(BufferedImage srcImg, byte[][] workPixels, int start, int delta) {
 		final int[] tempPixels = new int[srcWidth];   // Used if we work on int based bitmaps, later used to keep channel values
 		final byte[] srcPixels = new byte[srcWidth]; // create reusable row to minimize memory overhead
-
+		
 		for (int k = start; k < srcHeight; k=k+delta)
 		{
 			ImageUtils.getPixelsBGR(srcImg, k, srcWidth, srcPixels, tempPixels);
-
+			
 			for (int i = dstWidth-1;i>=0 ; i--)
 			{
 				int sampleLocation = i;
 				final int max = horizontalSubsamplingData.contributionsPerPixels[i];
-
 				float sample0 = 0.0f;
 				int index= i * horizontalSubsamplingData.numContributors;
 				for (int j= max-1; j >= 0; j--) {
 					float arrWeight = horizontalSubsamplingData.weights[index];
 					int pixelIndex = horizontalSubsamplingData.pickPixels[index];
-
+					
 					sample0 += (srcPixels[pixelIndex]&0xff) * arrWeight;
 					index++;
 				}
-
+				
 				workPixels[k][sampleLocation] = toByte(sample0);
 			}
-			processedItems++;
-			if (start==0){ // only update progress listener from main thread
-				setProgress();
+			processedItems.incrementAndGet();
+		}
+	}
+	
+	private byte[] processRemainingVerticalLines(final byte[][] workPixels, final byte[] outPixels) {
+		Thread[] threads = new Thread[numberOfThreads];
+		for (int index=0; index<numberOfThreads; index++){
+			final int threadIndex = index;
+			Thread thread = new Thread(new Runnable(){
+				public void run(){
+					verticalFromWorkToDst(workPixels, outPixels, threadIndex, numberOfThreads);
+				}
+			});
+			threads[index] = thread;
+			thread.setName("Vertical Runner #"+threadIndex);
+			thread.start();
+		}
+		waitForAll(threads);
+		return outPixels;
+	}
+	
+	private void verticalFromWorkToDst(byte[][] workPixels, byte[] outPixels, int start, int delta) {
+		if (nrChannels==1){
+			verticalFromWorkToDstGrayScale(workPixels, outPixels, start,numberOfThreads);
+		} else {
+			verticalFromWorkToDstRGB(workPixels, outPixels, start, delta);
+		}
+	}
+	
+	private void verticalFromWorkToDstRGB(byte[][] workPixels, byte[] outPixels, int start, int delta) {
+		boolean useChannel3 = nrChannels>3;
+		for (int x = start; x < dstWidth; x+=delta)
+		{
+			final int xLocation = x*nrChannels;
+			for (int y = dstHeight-1; y >=0 ; y--)
+			{
+				final int yTimesNumContributors = y * verticalSubsamplingData.numContributors;
+				final int max = verticalSubsamplingData.contributionsPerPixels[y];
+				final int sampleLocation = (y*dstWidth+x)*nrChannels;
+				
+				float sample0 = 0.0f;
+				float sample1 = 0.0f;
+				float sample2 = 0.0f;
+				float sample3 = 0.0f;
+				int index = yTimesNumContributors;
+				for (int j = max-1; j >= 0 ; j--) {
+					int valueLocation = verticalSubsamplingData.pickPixels[index];
+					float arrWeight = verticalSubsamplingData.weights[index];
+					sample0 += (workPixels[valueLocation][xLocation]&0xff) *arrWeight ;
+					sample1 += (workPixels[valueLocation][xLocation+1]&0xff) * arrWeight;
+					sample2 += (workPixels[valueLocation][xLocation+2]&0xff) * arrWeight;
+					if (useChannel3){
+						sample3 += (workPixels[valueLocation][xLocation+3]&0xff) * arrWeight;
+					}
+					
+					index++;
+				}
+				
+				outPixels[sampleLocation] = toByte(sample0);
+				outPixels[sampleLocation+1] = toByte(sample1);
+				outPixels[sampleLocation+2] = toByte(sample2);
+				if (useChannel3){
+					outPixels[sampleLocation+3] = toByte(sample3);
+				}
 			}
+			processedItems.incrementAndGet();
 		}
 	}
 
+	private void verticalFromWorkToDstGrayScale(byte[][] workPixels, byte[] outPixels, int start, int delta) {
+		for (int x = start; x < dstWidth; x+=delta)
+		{
+			final int xLocation = x;
+			for (int y = dstHeight-1; y >=0 ; y--)
+			{
+				final int yTimesNumContributors = y * verticalSubsamplingData.numContributors;
+				final int max = verticalSubsamplingData.contributionsPerPixels[y];
+				final int sampleLocation = (y*dstWidth+x);
+				
+				float sample0 = 0.0f;
+				int index = yTimesNumContributors;
+				for (int j = max-1; j >= 0 ; j--) {
+					int valueLocation = verticalSubsamplingData.pickPixels[index];
+					float arrWeight = verticalSubsamplingData.weights[index];
+					sample0 += (workPixels[valueLocation][xLocation]&0xff) * arrWeight;
+					index++;
+				}
+				
+				outPixels[sampleLocation] = toByte(sample0);
+			}
+			processedItems.incrementAndGet();
+		}
+	}
+	
 	private byte toByte(float f){
-		if (f<0){
+		if (f<0) {
 			return 0;
-		}
-		if (f>MAX_CHANNEL_VALUE){
+		} else if (f>MAX_CHANNEL_VALUE) {
 			return (byte) MAX_CHANNEL_VALUE;
+		} else {
+			return (byte)(f+0.5f); // add 0.5 same as Math.round
 		}
-		return (byte)(f+0.5f); // add 0.5 same as Math.round
 	}
-
-	private void setProgress(){
-		fireProgressChanged(processedItems/totalItems);
-	}
-
+	
 	protected int getResultBufferedImageType(BufferedImage srcImg) {
 		return nrChannels == 3 ? BufferedImage.TYPE_3BYTE_BGR :
-				(nrChannels == 4 ? BufferedImage.TYPE_4BYTE_ABGR :
-				(srcImg.getSampleModel().getDataType() == DataBuffer.TYPE_USHORT ?
-						BufferedImage.TYPE_USHORT_GRAY :
-						BufferedImage.TYPE_BYTE_GRAY)
+			  (nrChannels == 4 ? BufferedImage.TYPE_4BYTE_ABGR :
+			  (srcImg.getSampleModel().getDataType() == DataBuffer.TYPE_USHORT ?
+			      BufferedImage.TYPE_USHORT_GRAY :
+			      BufferedImage.TYPE_BYTE_GRAY)
 		);
 	}
 }
-
