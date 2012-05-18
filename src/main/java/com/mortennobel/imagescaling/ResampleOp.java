@@ -173,21 +173,7 @@ public class ResampleOp extends AdvancedResizeOp
 		this.numberOfThreads = numberOfThreads;
 	}
 	
-	public BufferedImage doFilter(BufferedImage srcImg, float scale) {
-		int dstWidth = (int) (srcImg.getWidth()*scale+0.5f);
-		int dstHeight = (int) (srcImg.getHeight()*scale+0.5f);
-		return doFilter(srcImg, dstWidth, dstHeight);
-	}
-	
-	public BufferedImage doFilter(BufferedImage srcImg, int dstWidth, int dstHeight) {
-		return doFilter(srcImg, new BufferedImage(dstWidth, dstHeight, getResultBufferedImageType(srcImg)), dstWidth, dstHeight);
-	}
-	
-	public BufferedImage doFilter(BufferedImage srcImg, BufferedImage dstImg) {
-		return doFilter(srcImg, dstImg, dstImg.getWidth(), dstImg.getHeight());
-	}
-	
-	public BufferedImage doFilter(BufferedImage srcImg, BufferedImage dstImg, int dstWidth, int dstHeight) {
+	protected BufferedImage doFilter(BufferedImage srcImg, BufferedImage dstImg, int dstWidth, int dstHeight) {
 		
 		assert multipleInvocationLock.incrementAndGet()==1:"Multiple concurrent invocations detected";
 		
@@ -305,9 +291,7 @@ public class ResampleOp extends AdvancedResizeOp
 	
 	private void waitForAll(Thread[] threads) {
 		try {
-			for(Thread thread:threads) {
-				thread.join(Long.MAX_VALUE);
-			}
+			for(Thread thread:threads) thread.join(Long.MAX_VALUE);
 		} catch (InterruptedException e) {
  			e.printStackTrace();
  			throw new RuntimeException(e);
@@ -441,7 +425,7 @@ public class ResampleOp extends AdvancedResizeOp
 				for (int j = max-1; j >= 0 ; j--) {
 					int valueLocation = verticalSubsamplingData.pickPixels[index];
 					float arrWeight = verticalSubsamplingData.weights[index];
-					sample0 += (workPixels[valueLocation][xLocation]&0xff) *arrWeight ;
+					sample0 += (workPixels[valueLocation][xLocation]&0xff) * arrWeight ;
 					sample1 += (workPixels[valueLocation][xLocation+1]&0xff) * arrWeight;
 					sample2 += (workPixels[valueLocation][xLocation+2]&0xff) * arrWeight;
 					if (useChannel3){
