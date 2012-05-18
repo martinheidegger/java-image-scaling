@@ -173,6 +173,20 @@ public class ResampleOp extends AdvancedResizeOp
 		this.numberOfThreads = numberOfThreads;
 	}
 	
+	public BufferedImage doFilter(BufferedImage srcImg, float scale) {
+		int dstWidth = (int) (srcImg.getWidth()*scale+0.5f);
+		int dstHeight = (int) (srcImg.getHeight()*scale+0.5f);
+		return doFilter(srcImg, dstWidth, dstHeight);
+	}
+	
+	public BufferedImage doFilter(BufferedImage srcImg, int dstWidth, int dstHeight) {
+		return doFilter(srcImg, new BufferedImage(dstWidth, dstHeight, getResultBufferedImageType(srcImg)), dstWidth, dstHeight);
+	}
+	
+	public BufferedImage doFilter(BufferedImage srcImg, BufferedImage dstImg) {
+		return doFilter(srcImg, dstImg, dstImg.getWidth(), dstImg.getHeight());
+	}
+	
 	public BufferedImage doFilter(BufferedImage srcImg, BufferedImage dstImg, int dstWidth, int dstHeight) {
 		
 		assert multipleInvocationLock.incrementAndGet()==1:"Multiple concurrent invocations detected";
@@ -191,7 +205,6 @@ public class ResampleOp extends AdvancedResizeOp
 		
 		this.dstWidth = dstWidth;
 		this.dstHeight = dstHeight;
-		
 		srcWidth = srcImg.getWidth();
 		srcHeight = srcImg.getHeight();
 		processedItems = new AtomicInteger(0);
@@ -222,21 +235,35 @@ public class ResampleOp extends AdvancedResizeOp
 		ImageUtils.setBGRPixels(outPixels, dstImg, 0, 0, dstWidth, dstHeight);
 	}
 	
+	private void checkProgress() {
+		try {
+			int itemsProcessedBefore = 0;
+			int itemsProcessed;
+			while( (itemsProcessed = processedItems.intValue()) != totalItems ) {
+				if( itemsProcessed != itemsProcessedBefore ) {
+					itemsProcessedBefore = itemsProcessed;
+					fireProgressChanged(itemsProcessed/totalItems);
+				}
+				Thread.sleep(10);
+			}
+		} catch (InterruptedException e) {}
+	}
+	
 	private BufferedImage validateImage(BufferedImage image) {
-		if( isNotProcessableImageType(image) ) {
-			return convertToProcessableImage(image);
+		if( isNotProcessable(image) ) {
+			return convertToProcessable(image);
 		} else {
 			return image;
 		}
 	}
 	
-	private boolean isNotProcessableImageType(BufferedImage srcImg) {
+	private boolean isNotProcessable(BufferedImage srcImg) {
 		return srcImg.getType() == BufferedImage.TYPE_BYTE_BINARY ||
 			srcImg.getType() == BufferedImage.TYPE_BYTE_INDEXED ||
 			srcImg.getType() == BufferedImage.TYPE_CUSTOM;
 	}
 	
-	private BufferedImage convertToProcessableImage(BufferedImage srcImg) {
+	private BufferedImage convertToProcessable(BufferedImage srcImg) {
 		return ImageUtils.convert(srcImg, srcImg.getColorModel().hasAlpha() ? BufferedImage.TYPE_4BYTE_ABGR : BufferedImage.TYPE_3BYTE_BGR);
 	}
 
@@ -256,38 +283,24 @@ public class ResampleOp extends AdvancedResizeOp
 		return dstImg;
 	}
 	
-	private void checkProgress() {
-		try {
-			int itemsProcessedBefore = 0;
-			int itemsProcessed;
-			while( (itemsProcessed = processedItems.intValue()) != totalItems ) {
-				if( itemsProcessed != itemsProcessedBefore ) {
-					itemsProcessedBefore = itemsProcessed;
-					fireProgressChanged(itemsProcessed/totalItems);
-				}
-				Thread.currentThread().wait(1);
-			}
-		} catch (InterruptedException e) {
-			e.printStackTrace();
-			throw new RuntimeException(e);
-		}
-	}
-	
 	private byte[][] processHorizontalLines(final BufferedImage srcImg, final byte[][] workPixels) {
 		Thread[] threads = new Thread[numberOfThreads];
-		for (int index=0;index<numberOfThreads;index++){
-			final int threadIndex = index;
-			Thread thread = new Thread(new Runnable(){
-				public void run(){
-					horizontallyFromSrcToWork(srcImg, workPixels, threadIndex, numberOfThreads);
-				}
-			});
-			threads[index] = thread;
-			thread.setName("Horizontal Runner #"+threadIndex);
-			thread.start();
+		for(int index=0; index < numberOfThreads; index++) {
+			threads[index] = spawnHorizontalThread(srcImg, workPixels, index);
 		}
 		waitForAll(threads);
 		return workPixels;
+	}
+	
+	private Thread spawnHorizontalThread(final BufferedImage srcImg, final byte[][] workPixels, final int index) {
+		Thread thread = new Thread(new Runnable(){
+			public void run(){
+				horizontallyFromSrcToWork(srcImg, workPixels, index, numberOfThreads);
+			}
+		});
+		thread.setName("Horizontal Runner #"+index);
+		thread.start();
+		return thread;
 	}
 	
 	private void waitForAll(Thread[] threads) {
@@ -384,23 +397,26 @@ public class ResampleOp extends AdvancedResizeOp
 	private byte[] processRemainingVerticalLines(final byte[][] workPixels, final byte[] outPixels) {
 		Thread[] threads = new Thread[numberOfThreads];
 		for (int index=0; index<numberOfThreads; index++){
-			final int threadIndex = index;
-			Thread thread = new Thread(new Runnable(){
-				public void run(){
-					verticalFromWorkToDst(workPixels, outPixels, threadIndex, numberOfThreads);
-				}
-			});
-			threads[index] = thread;
-			thread.setName("Vertical Runner #"+threadIndex);
-			thread.start();
+			threads[index] = spawnVerticalThread(workPixels, outPixels, index);
 		}
 		waitForAll(threads);
 		return outPixels;
 	}
 	
+	private Thread spawnVerticalThread(final byte[][] workPixels, final byte[] outPixels, final int index) {
+		Thread thread = new Thread(new Runnable(){
+			public void run(){
+				verticalFromWorkToDst(workPixels, outPixels, index, numberOfThreads);
+			}
+		});
+		thread.setName("Vertical Runner #"+index);
+		thread.start();
+		return thread;
+	}
+
 	private void verticalFromWorkToDst(byte[][] workPixels, byte[] outPixels, int start, int delta) {
 		if (nrChannels==1){
-			verticalFromWorkToDstGrayScale(workPixels, outPixels, start,numberOfThreads);
+			verticalFromWorkToDstGrayScale(workPixels, outPixels, start, numberOfThreads);
 		} else {
 			verticalFromWorkToDstRGB(workPixels, outPixels, start, delta);
 		}
