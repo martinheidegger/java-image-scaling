@@ -17,10 +17,6 @@
  */
 package com.mortennobel.imagescaling;
 
- 
-
-import com.mortennobel.imagescaling.experimental.ResampleOpSingleThread;
-
 import javax.imageio.ImageIO;
 import javax.swing.*;
 import javax.swing.border.TitledBorder;
@@ -65,7 +61,7 @@ public class CorrectnessTest extends JFrame implements ActionListener {
 	}
 
 	private void doRescale(ResampleFilter filter) {
-		ResampleOpSingleThread resampleOp = new ResampleOpSingleThread (200,200);
+		ResampleOp resampleOp = new ResampleOp (200,200);
 		resampleOp.setFilter(filter);
 		//resampleOp.setNumberOfThreads(1);
 		resampleOp.setUnsharpenMask(AdvancedResizeOp.UnsharpenMask.Normal);
